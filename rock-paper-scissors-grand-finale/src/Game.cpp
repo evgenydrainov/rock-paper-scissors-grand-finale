@@ -4,12 +4,50 @@
 #include <SDL_ttf.h>
 #include <string.h>
 #include <math.h>
-#include <immintrin.h>
+#include <stdlib.h>
+#include <random>
+#include <iostream>
 
 #include "misc.h"
 #include "mathh.h"
 
+void Game::Reset() {
+	memset(entities, 0, entity_count * sizeof(*entities));
+
+	for (int i = 0; i < entity_count; i++) {
+		Entity* e = &entities[i];
+		e->x = random.range(0.0f, map_w);
+		e->y = random.range(0.0f, map_h);
+		e->type = (EntityType) (random.next() % 3);
+	}
+}
+
 void Game::Init() {
+	std::cout << "entity count: ";
+	std::cin >> entity_count;
+
+	if (entity_count <= 0) {
+		entity_count = 1000;
+	}
+
+	std::cout << "map size: ";
+	std::cin >> map_w;
+
+	if (map_w <= 0.0f) {
+		map_w = 2000.0f;
+	}
+
+	map_h = map_w;
+
+	std::cout << "entity speed: ";
+	std::cin >> entity_speed;
+
+	if (entity_speed <= 0.0f) {
+		entity_speed = 1.0f;
+	}
+
+	entity_run_away_speed = entity_speed / 2.0f;
+
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
 
 	SDL_Init(SDL_INIT_VIDEO
@@ -41,21 +79,27 @@ void Game::Init() {
 	snd_paper    = Mix_LoadWAV("paper.wav");
 	snd_scissors = Mix_LoadWAV("scissors.wav");
 
-	_rdrand64_step(&random.s[0]);
-	_rdrand64_step(&random.s[1]);
-	_rdrand64_step(&random.s[2]);
-	_rdrand64_step(&random.s[3]);
-
-	entities = (Entity*) malloc(MAX_ENTITIES * sizeof(*entities));
-	memset(entities, 0, MAX_ENTITIES * sizeof(*entities));
-
-	entity_count = MAX_ENTITIES;
-	for (int i = 0; i < entity_count; i++) {
-		Entity* e = &entities[i];
-		e->x = random.range(0.0f, 1920.0f/*2000.0f*/);
-		e->y = random.range(0.0f, 1080.0f/*2000.0f*/);
-		e->type = (EntityType) (random.next() % 3);
+	{
+		std::random_device d;
+		uint32_t* s = (uint32_t*) random.s;
+		s[0] = d();
+		s[1] = d();
+		s[2] = d();
+		s[3] = d();
+		s[4] = d();
+		s[5] = d();
+		s[6] = d();
+		s[7] = d();
 	}
+
+	entities = (Entity*) malloc(entity_count * sizeof(*entities));
+
+	if (!entities) {
+		SDL_Log("Out of memory.");
+		exit(1);
+	}
+
+	Reset();
 }
 
 void Game::Quit() {
@@ -105,15 +149,7 @@ void Game::Frame() {
 						}
 
 						case SDL_SCANCODE_R: {
-							memset(entities, 0, MAX_ENTITIES * sizeof(*entities));
-
-							entity_count = MAX_ENTITIES;
-							for (int i = 0; i < entity_count; i++) {
-								Entity* e = &entities[i];
-								e->x = random.range(0.0f, 1920.0f/*2000.0f*/);
-								e->y = random.range(0.0f, 1080.0f/*2000.0f*/);
-								e->type = (EntityType) (random.next() % 3);
-							}
+							Reset();
 							break;
 						}
 					}
@@ -124,9 +160,11 @@ void Game::Frame() {
 
 	float delta = 60.0f / (float)GAME_FPS;
 
+	double update_took = GetTime();
 	if (!paused) {
 		Update(delta);
 	}
+	update_took = GetTime() - update_took;
 
 	const Uint8* key = SDL_GetKeyboardState(nullptr);
 
@@ -138,7 +176,9 @@ void Game::Frame() {
 	if (key[SDL_SCANCODE_UP])    camera_y -= spd * delta;
 	if (key[SDL_SCANCODE_DOWN])  camera_y += spd * delta;
 
+	double draw_took = GetTime();
 	Draw(delta);
+	draw_took = GetTime() - draw_took;
 
 #ifndef __EMSCRIPTEN__
 	t = GetTime();
@@ -148,23 +188,34 @@ void Game::Frame() {
 		while (GetTime() < frame_end_time) {}
 	}
 #endif
+
+	if (frame % 60 == 0) {
+		double fps = 1.0 / (t - prev_time);
+		SDL_Log("update: %fms", update_took * 1000.0);
+		SDL_Log("draw:   %fms", draw_took * 1000.0);
+		SDL_Log("FPS:    %.2f\n\n", fps);
+	}
+
+	frame++;
+
+	prev_time = t;
 }
 
-Entity* Game::find_closest(float x, float y, EntityType type) {
+Entity* Game::find_closest(Entity* e) {
 	Entity* result = nullptr;
 	float dist = INFINITY;
 
 	for (int i = 0; i < entity_count; i++) {
-		Entity* e = &entities[i];
+		Entity* e2 = &entities[i];
 
-		if (e->type != type) {
+		if (e->type == e2->type) {
 			continue;
 		}
 
-		float d = point_distance(x, y, e->x, e->y);
+		float d = point_distance(e->x, e->y, e2->x, e2->y);
 		if (d < dist) {
 			dist = d;
-			result = e;
+			result = e2;
 		}
 	}
 
@@ -175,19 +226,34 @@ void Game::Update(float delta) {
 	for (int i = 0; i < entity_count; i++) {
 		Entity* e = &entities[i];
 
-		EntityType target_type = EntityType::SCISSORS;
+		EntityType prey = EntityType::SCISSORS;
+		// EntityType predator = EntityType::PAPER;
 		if (e->type == EntityType::PAPER) {
-			target_type = EntityType::ROCK;
+			prey = EntityType::ROCK;
+			// predator = EntityType::SCISSORS;
 		} else if (e->type == EntityType::SCISSORS) {
-			target_type = EntityType::PAPER;
+			prey = EntityType::PAPER;
+			// predator = EntityType::ROCK;
 		}
 
-		if (Entity* target = find_closest(e->x, e->y, target_type)) {
-			float dx = target->x - e->x;
-			float dy = target->y - e->y;
+		if (Entity* e2 = find_closest(e)) {
+			float dx = e2->x - e->x;
+			float dy = e2->y - e->y;
 			normalize0(dx, dy, &dx, &dy);
-			e->x += dx / 2.0f * delta;
-			e->y += dy / 2.0f * delta;
+
+			float spd = entity_speed;
+			if (e2->type != prey) {
+				spd = entity_run_away_speed;
+				dx = -dx;
+				dy = -dy;
+			}
+
+			e->x += dx * spd * delta;
+			e->y += dy * spd * delta;
+
+			float shiver = spd * entity_shiver_multiplier;
+			e->x += random.range(-shiver, shiver);
+			e->y += random.range(-shiver, shiver);
 		}
 	}
 
