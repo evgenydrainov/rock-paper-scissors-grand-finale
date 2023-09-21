@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rock-paper-scissors-season-finale", "rock-paper-scissors-season-finale\rock-paper-scissors-season-finale.vcxproj", "{0D65C35F-0120-442D-AADE-CFDC27FD4789}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rock-paper-scissors-grand-finale", "rock-paper-scissors-grand-finale\rock-paper-scissors-grand-finale.vcxproj", "{0D65C35F-0120-442D-AADE-CFDC27FD4789}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
