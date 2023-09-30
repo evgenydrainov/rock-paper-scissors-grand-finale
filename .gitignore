@@ -1,4 +1,5 @@
 .vs/
 *.user
 out/
-rock-paper-scissors-grand-finale/*.dll
+*.dll
+imgui.ini

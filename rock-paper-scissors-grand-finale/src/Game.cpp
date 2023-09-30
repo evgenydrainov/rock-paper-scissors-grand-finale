@@ -11,7 +11,21 @@
 #include "misc.h"
 #include "mathh.h"
 
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_sdl2.h"
+#include "imgui/imgui_impl_sdlrenderer2.h"
+
 void Game::Reset() {
+	if (entities) free(entities);
+
+	entity_count = init_entity_count;
+	entities = (Entity*) malloc(entity_count * sizeof(Entity));
+
+	if (!entities) {
+		SDL_Log("Out of memory.");
+		exit(1);
+	}
+
 	memset(entities, 0, entity_count * sizeof(*entities));
 
 	for (int i = 0; i < entity_count; i++) {
@@ -23,31 +37,6 @@ void Game::Reset() {
 }
 
 void Game::Init() {
-	std::cout << "entity count: ";
-	std::cin >> entity_count;
-
-	if (entity_count <= 0) {
-		entity_count = 1000;
-	}
-
-	std::cout << "map size: ";
-	std::cin >> map_w;
-
-	if (map_w <= 0.0f) {
-		map_w = 2000.0f;
-	}
-
-	map_h = map_w;
-
-	std::cout << "entity speed: ";
-	std::cin >> entity_speed;
-
-	if (entity_speed <= 0.0f) {
-		entity_speed = 1.0f;
-	}
-
-	entity_run_away_speed = entity_speed / 2.0f;
-
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
 
 	SDL_Init(SDL_INIT_VIDEO
@@ -92,17 +81,22 @@ void Game::Init() {
 		s[7] = d();
 	}
 
-	entities = (Entity*) malloc(entity_count * sizeof(*entities));
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
 
-	if (!entities) {
-		SDL_Log("Out of memory.");
-		exit(1);
-	}
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
+	ImGui_ImplSDLRenderer2_Init(renderer);
 
 	Reset();
 }
 
 void Game::Quit() {
+	ImGui_ImplSDLRenderer2_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
+	ImGui::DestroyContext();
+
 	free(entities);
 
 	Mix_FreeChunk(snd_scissors);
@@ -134,6 +128,8 @@ void Game::Frame() {
 	{
 		SDL_Event ev;
 		while (SDL_PollEvent(&ev)) {
+			ImGui_ImplSDL2_ProcessEvent(&ev);
+
 			switch (ev.type) {
 				case SDL_QUIT: {
 					quit = true;
@@ -143,13 +139,18 @@ void Game::Frame() {
 				case SDL_KEYDOWN: {
 					SDL_Scancode scancode = ev.key.keysym.scancode;
 					switch (scancode) {
-						case SDL_SCANCODE_ESCAPE: {
+						case SDL_SCANCODE_P: {
 							paused ^= true;
 							break;
 						}
 
 						case SDL_SCANCODE_R: {
 							Reset();
+							break;
+						}
+
+						case SDL_SCANCODE_ESCAPE: {
+							main_window_open ^= true;
 							break;
 						}
 					}
@@ -168,13 +169,42 @@ void Game::Frame() {
 
 	const Uint8* key = SDL_GetKeyboardState(nullptr);
 
-	float spd = 20.0f;
-	if (key[SDL_SCANCODE_LSHIFT]) spd = 10.0f;
+	if (!main_window_focused) {
+		float spd = 20.0f;
+		if (key[SDL_SCANCODE_LSHIFT]) spd = 10.0f;
 
-	if (key[SDL_SCANCODE_LEFT])  camera_x -= spd * delta;
-	if (key[SDL_SCANCODE_RIGHT]) camera_x += spd * delta;
-	if (key[SDL_SCANCODE_UP])    camera_y -= spd * delta;
-	if (key[SDL_SCANCODE_DOWN])  camera_y += spd * delta;
+		if (key[SDL_SCANCODE_LEFT])  camera_x -= spd * delta;
+		if (key[SDL_SCANCODE_RIGHT]) camera_x += spd * delta;
+		if (key[SDL_SCANCODE_UP])    camera_y -= spd * delta;
+		if (key[SDL_SCANCODE_DOWN])  camera_y += spd * delta;
+	}
+
+	{
+		ImGui_ImplSDLRenderer2_NewFrame();
+		ImGui_ImplSDL2_NewFrame();
+		ImGui::NewFrame();
+
+		main_window_focused = false;
+		if (main_window_open) {
+			if (ImGui::Begin("Rock Paper Scissors Grand Finale", &main_window_open)) {
+				ImGui::DragInt("Entity Count", &init_entity_count, 1.0f, 1, 5'000, "%d", ImGuiSliderFlags_AlwaysClamp);
+				ImGui::DragFloat("Map Width", &map_w);
+				ImGui::DragFloat("Map Height", &map_h);
+				ImGui::DragFloat("Entity Speed", &entity_speed, 0.1f);
+				ImGui::DragFloat("Entity Run Away Speed", &entity_run_away_speed, 0.1f);
+				ImGui::DragFloat("Entity Shiver Amount", &entity_shiver_multiplier, 0.1f);
+				if (ImGui::Button("Pause (P)")) {
+					paused ^= true;
+				}
+				if (ImGui::Button("Reset (R)")) {
+					Reset();
+				}
+				ImGui::Text("Press ESC to toggle this window.");
+				main_window_focused = ImGui::IsWindowFocused();
+			}
+			ImGui::End();
+		}
+	}
 
 	double draw_took = GetTime();
 	Draw(delta);
@@ -251,9 +281,11 @@ void Game::Update(float delta) {
 			e->x += dx * spd * delta;
 			e->y += dy * spd * delta;
 
-			float shiver = spd * entity_shiver_multiplier;
-			e->x += random.range(-shiver, shiver);
-			e->y += random.range(-shiver, shiver);
+			if (entity_shiver_multiplier > 0.0f) {
+				float shiver = spd * entity_shiver_multiplier;
+				e->x += random.range(-shiver, shiver);
+				e->y += random.range(-shiver, shiver);
+			}
 		}
 	}
 
@@ -323,6 +355,9 @@ void Game::Draw(float delta) {
 
 		SDL_RenderCopy(renderer, tex_entities, &src, &dest);
 	}
+
+	ImGui::Render();
+	ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
 
 	SDL_RenderPresent(renderer);
 }

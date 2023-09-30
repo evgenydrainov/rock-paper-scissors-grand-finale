@@ -24,13 +24,14 @@ struct Entity {
 struct Game {
 	Entity* entities;
 	int entity_count;
+	int init_entity_count = 1000;
 
 	float camera_x;
 	float camera_y;
-	float map_w;
-	float map_h;
-	float entity_speed;
-	float entity_run_away_speed;
+	float map_w = 2000.0f;
+	float map_h = 2000.0f;
+	float entity_speed = 1.0f;
+	float entity_run_away_speed = 0.25f;
 	float entity_shiver_multiplier = 0.5f;
 
 	xoshiro256plusplus random;
@@ -41,6 +42,8 @@ struct Game {
 	bool quit;
 	int frame;
 	double prev_time;
+	bool main_window_open = true;
+	bool main_window_focused;
 
 	SDL_Texture* tex_entities;
 
