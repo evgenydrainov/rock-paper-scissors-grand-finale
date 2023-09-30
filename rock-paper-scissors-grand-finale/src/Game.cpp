@@ -169,6 +169,10 @@ void Game::Frame() {
 
 	const Uint8* key = SDL_GetKeyboardState(nullptr);
 
+	int mouse_dx;
+	int mouse_dy;
+	Uint32 mouse = SDL_GetRelativeMouseState(&mouse_dx, &mouse_dy);
+
 	if (!main_window_focused) {
 		float spd = 20.0f;
 		if (key[SDL_SCANCODE_LSHIFT]) spd = 10.0f;
@@ -177,6 +181,11 @@ void Game::Frame() {
 		if (key[SDL_SCANCODE_RIGHT]) camera_x += spd * delta;
 		if (key[SDL_SCANCODE_UP])    camera_y -= spd * delta;
 		if (key[SDL_SCANCODE_DOWN])  camera_y += spd * delta;
+
+		if (mouse & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+			camera_x -= (float) mouse_dx;
+			camera_y -= (float) mouse_dy;
+		}
 	}
 
 	{
